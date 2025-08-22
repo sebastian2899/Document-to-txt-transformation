@@ -1,0 +1,12 @@
+# Core (no external deps required for TXT-only)
+
+# Optional dependencies for richer extraction
+PyPDF2>=3.0.0            # PDF text extraction
+python-docx>=1.1.0       # DOCX reading
+pillow>=10.0.0           # Imaging (required by pytesseract, pdf2image)
+pytesseract>=0.3.10      # OCR engine wrapper (requires Tesseract installed)
+pdf2image>=1.17.0        # Convert PDF pages to images for OCR
+
+# Provider stubs (to be implemented later)
+# boto3>=1.34.0           # For S3FileProvider
+# azure-storage-blob>=12.20.0  # For AzureBlobFileProvider
