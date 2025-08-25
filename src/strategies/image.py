@@ -10,8 +10,9 @@ class ImageTextStrategy(TextExtractionStrategy):
 
     SUPPORTED = {"png", "jpg", "jpeg", "tiff", "bmp"}
 
-    def __init__(self, ocr: OCREngine | None):
+    def __init__(self, ocr: OCREngine | None, ocr_lang: str | None = None):
         self.ocr = ocr
+        self.ocr_lang = ocr_lang
 
     def can_handle(self, extension: str) -> bool:
         return extension.lower() in self.SUPPORTED
@@ -21,7 +22,7 @@ class ImageTextStrategy(TextExtractionStrategy):
             logger.info("OCR disabled or unavailable. Cannot extract from image: %s", file.source_uri)
             return ""
         try:
-            return self.ocr.image_to_text(file.bytes_path)
+            return self.ocr.image_to_text(file.bytes_path, lang=self.ocr_lang)
         except Exception as e:
             logger.warning("Image OCR failed for %s: %s", file.source_uri, e)
             return ""

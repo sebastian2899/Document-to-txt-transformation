@@ -10,12 +10,26 @@ from src.strategies.fallback import FallbackStrategy
 
 
 class StrategyFactory:
-    def __init__(self, ocr: Optional[OCREngine] = None):
+    def __init__(
+        self,
+        ocr: Optional[OCREngine] = None,
+        poppler_path: Optional[str] = None,
+        ocr_lang: Optional[str] = None,
+        ocr_dpi: int = 300,
+    ):
+        self._poppler_path = poppler_path
+        self._ocr_lang = ocr_lang
+        self._ocr_dpi = ocr_dpi
         self._strategies: List[TextExtractionStrategy] = [
             TXTTextStrategy(),
             DOCXTextStrategy(),
-            ImageTextStrategy(ocr),
-            PDFTextStrategy(ocr),
+            ImageTextStrategy(ocr, ocr_lang=self._ocr_lang),
+            PDFTextStrategy(
+                ocr,
+                poppler_path=self._poppler_path,
+                ocr_lang=self._ocr_lang,
+                ocr_dpi=self._ocr_dpi,
+            ),
             FallbackStrategy(),  # keep last
         ]
 

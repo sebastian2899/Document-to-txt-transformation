@@ -32,5 +32,8 @@ class TesseractOCREngine(OCREngine):
     def image_to_text(self, image_path: Path, lang: Optional[str] = None) -> str:
         assert Image is not None and pytesseract is not None
         with Image.open(image_path) as img:
-            txt = pytesseract.image_to_string(img, lang=lang or 'eng')
-        return txt or ""
+            for config in ("--oem 3 --psm 6", "--oem 3 --psm 3"):
+                txt = pytesseract.image_to_string(img, lang=(lang or 'eng'), config=config)
+                if txt and txt.strip():
+                    return txt.strip()
+        return ""

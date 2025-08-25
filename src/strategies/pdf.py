@@ -12,6 +12,15 @@ try:
 except Exception:  # pragma: no cover - optional
     PyPDF2 = None  # type: ignore
 
+# Optional image preprocessing for better OCR
+try:  # pragma: no cover - optional
+    from PIL import Image as PILImage
+    from PIL import ImageOps, ImageFilter
+except Exception:  # pragma: no cover - optional
+    PILImage = None  # type: ignore
+    ImageOps = None  # type: ignore
+    ImageFilter = None  # type: ignore
+
 
 class PDFTextStrategy(TextExtractionStrategy):
     """Extract text from PDFs. If no text is found (scanned PDFs),
@@ -21,8 +30,17 @@ class PDFTextStrategy(TextExtractionStrategy):
     We keep OCR optional; if unavailable, we return whatever text we can.
     """
 
-    def __init__(self, ocr: Optional[OCREngine] = None):
+    def __init__(
+        self,
+        ocr: Optional[OCREngine] = None,
+        poppler_path: Optional[str] = None,
+        ocr_lang: Optional[str] = None,
+        ocr_dpi: int = 300,
+    ):
         self.ocr = ocr
+        self.poppler_path = poppler_path
+        self.ocr_lang = ocr_lang
+        self.ocr_dpi = ocr_dpi
 
     def can_handle(self, extension: str) -> bool:
         return extension.lower() == "pdf"
@@ -59,19 +77,61 @@ class PDFTextStrategy(TextExtractionStrategy):
     def _ocr_pdf(self, path: Path) -> str:
         try:
             from pdf2image import convert_from_path  # optional dep
+            from pdf2image.exceptions import PDFInfoNotInstalledError
         except Exception:
             logger.warning("pdf2image not installed. Cannot OCR PDF: %s", path)
             return ""
-        images = convert_from_path(str(path))
+        try:
+            images = convert_from_path(
+                str(path), dpi=self.ocr_dpi, poppler_path=self.poppler_path
+            )
+        except Exception as e:
+            # Handle missing poppler gracefully
+            try:
+                from pdf2image.exceptions import PDFInfoNotInstalledError  # type: ignore
+            except Exception:
+                PDFInfoNotInstalledError = None  # type: ignore
+            if 'PDFInfoNotInstalledError' in type(e).__name__ or (
+                PDFInfoNotInstalledError and isinstance(e, PDFInfoNotInstalledError)  # type: ignore
+            ):
+                logger.warning(
+                    "Poppler not installed or not in PATH. Install it (e.g., brew install poppler) or pass --poppler-path. File: %s",
+                    path,
+                )
+                return ""
+            raise
         texts = []
         for img in images:
             # Save to a temp file-like path if needed; PIL Image works directly with OCR engine if wrapper accepts path only
             # So, save temporarily
+            # Light preprocessing: grayscale + autocontrast + median filter
+            proc = img.convert("L")
+            # upscale to help OCR on small fonts
+            try:
+                if PILImage is not None:
+                    w, h = proc.size
+                    proc = proc.resize((int(w * 2), int(h * 2)), resample=PILImage.BICUBIC)
+            except Exception:
+                pass
+            if ImageOps is not None:
+                proc = ImageOps.autocontrast(proc)
+            if ImageFilter is not None:
+                try:
+                    proc = proc.filter(ImageFilter.MedianFilter())
+                except Exception:
+                    pass
+            # simple binarization
+            try:
+                proc = proc.point(lambda p: 255 if p > 180 else 0)
+            except Exception:
+                pass
             tmp = Path(path.parent) / f".__page_ocr_tmp.png"
-            img.save(tmp, format="PNG")
+            proc.save(tmp, format="PNG")
             try:
                 assert self.ocr is not None
-                texts.append(self.ocr.image_to_text(tmp))
+                page_text = self.ocr.image_to_text(tmp, lang=self.ocr_lang)
+                logger.debug("OCR page text length: %s", len(page_text))
+                texts.append(page_text)
             finally:
                 try:
                     tmp.unlink(missing_ok=True)
